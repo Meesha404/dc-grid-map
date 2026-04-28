@@ -405,7 +405,7 @@
         <p>Real-time operational data from Elia Open Data Portal</p>
         <div class="source-badge live" id="live-badge">
           <span class="dot"></span>
-          <span id="live-status">Live — updating</span>
+          <span id="live-status">Live — fetching data...</span>
         </div>
       </div>
       <div class="panel-body">
@@ -417,7 +417,7 @@
         </div>
         
         <div class="live-metric" id="ace-metric">
-          <div class="live-metric-label">Grid Stress Indicator</div>
+          <div class="live-metric-label">Area Control Error (ACE)</div>
           <div class="live-metric-value" id="ace-value">--</div>
           <div class="live-metric-unit">MW</div>
         </div>
@@ -428,9 +428,9 @@
 
         <div class="info-box">
           <strong>💡 What this means:</strong><br>
-          • <strong>Positive</strong> = Excess generation → Good for new connections<br>
-          • <strong>Negative</strong> = Generation deficit → Grid under stress<br>
-          • Data refreshes every 60 seconds
+          • <strong>Positive imbalance</strong> = Excess generation → Good for new connections<br>
+          • <strong>Negative imbalance</strong> = Generation deficit → Grid under stress<br>
+          • Data from dataset <strong>ods169</strong> (near real-time, refreshed every minute)
         </div>
 
         <button class="refresh-btn" onclick="fetchLiveData()">🔄 Refresh Now</button>
@@ -442,7 +442,7 @@
 
 <script>
 // ================================================================
-//  SUBSTATION DATA
+//  SUBSTATION DATA (Static - keeps original functionality)
 // ================================================================
 const SUBSTATIONS_DATA = [
   { name:"Bruegel (Brussels)", lat:50.854, lng:4.352, voltage:150, availableMw:280 },
@@ -475,7 +475,7 @@ let updateInterval = null;
 // Initialize map
 const map = L.map('map').setView([50.65, 4.5], 8);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; OSM & CARTO | Data: Elia Group',
+  attribution: '&copy; OSM & CARTO | Data: Elia Group | Dataset: ods169',
   subdomains: 'abcd',
   maxZoom: 18
 }).addTo(map);
@@ -484,25 +484,17 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
 //  TAB SWITCHING
 // ================================================================
 function switchTab(tabName) {
-  // Update tab buttons
   const tabs = document.querySelectorAll('.tab');
-  tabs.forEach(tab => tab.classList.remove('active'));
-  if (event && event.target) {
-    event.target.classList.add('active');
-  } else {
-    // If called programmatically, find the button with matching onclick
-    tabs.forEach(tab => {
-      if (tab.getAttribute('onclick') === `switchTab('${tabName}')`) {
-        tab.classList.add('active');
-      }
-    });
-  }
+  tabs.forEach(tab => {
+    tab.classList.remove('active');
+    if (tab.getAttribute('onclick') === `switchTab('${tabName}')`) {
+      tab.classList.add('active');
+    }
+  });
   
-  // Update content
   document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
   document.getElementById(`${tabName}-tab`).classList.add('active');
   
-  // If switching to live tab, fetch data immediately
   if (tabName === 'live') {
     fetchLiveData();
     if (!updateInterval) {
@@ -514,14 +506,14 @@ function switchTab(tabName) {
 }
 
 // ================================================================
-//  LIVE ELIA DATA FETCHING
+//  LIVE ELIA DATA FETCHING - USING CORRECT DATASET ods169
 // ================================================================
 async function fetchLiveData() {
   try {
-    const response = await fetch(
-      'https://opendata.elia.be/api/explore/v2.1/catalog/datasets/system-imbalance/records?order_by=datetime DESC&limit=20',
-      { signal: AbortSignal.timeout(10000) }
-    );
+    // Using the confirmed dataset ID: ods169 (near real-time system imbalance)
+    const url = 'https://opendata.elia.be/api/explore/v2.1/catalog/datasets/ods169/records?order_by=datetime%20DESC&limit=20';
+    
+    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
     
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     
@@ -535,8 +527,8 @@ async function fetchLiveData() {
       throw new Error('No data received');
     }
   } catch (error) {
-    console.error('Elia API error:', error);
-    document.getElementById('live-status').textContent = '⚠️ Fallback mode';
+    console.error('Elia API error (ods169):', error);
+    document.getElementById('live-status').textContent = '⚠️ Waiting for data';
     document.getElementById('live-badge').className = 'source-badge fallback';
     setFallbackLiveData();
   }
@@ -547,14 +539,19 @@ async function fetchLiveData() {
 function updateLiveDisplay(records) {
   const latest = records[0];
   
-  // Try different field names that might be in the response
-  let imbalance = latest.imbalance || latest.net_imbalance || latest.value || 0;
-  let ace = latest.ace || latest.area_control_error || (imbalance * 0.9);
+  // Field names in ods169 dataset:
+  // - si = system imbalance
+  // - ace = area control error
+  // - datetime = timestamp
+  let imbalance = latest.si || latest.systemimbalance || latest.imbalance || latest.value || 0;
+  let ace = latest.ace || latest.areacontrolerror || (imbalance * 0.85);
+  let timestamp = latest.datetime || latest.timestamp || new Date().toISOString();
   
   // Update imbalance display
   const imbalanceElem = document.getElementById('imbalance-value');
   const imbalanceMetric = document.getElementById('imbalance-metric');
-  imbalanceElem.textContent = typeof imbalance === 'number' ? imbalance.toFixed(1) : imbalance;
+  const imbalanceVal = typeof imbalance === 'number' ? imbalance.toFixed(1) : parseFloat(imbalance).toFixed(1);
+  imbalanceElem.textContent = imbalanceVal;
   
   if (imbalance > 0) {
     imbalanceElem.style.color = '#3fb950';
@@ -567,21 +564,22 @@ function updateLiveDisplay(records) {
     imbalanceMetric.className = 'live-metric';
   }
   
-  // Update ACE/Stress display
+  // Update ACE display
   const aceElem = document.getElementById('ace-value');
-  aceElem.textContent = typeof ace === 'number' ? ace.toFixed(1) : ace;
+  const aceVal = typeof ace === 'number' ? ace.toFixed(1) : parseFloat(ace).toFixed(1);
+  aceElem.textContent = aceVal;
   
   // Update timestamp
-  let timestamp = latest.datetime || latest.timestamp || new Date().toISOString();
   try {
     const dateObj = new Date(timestamp);
     if (!isNaN(dateObj.getTime())) {
-      timestamp = dateObj.toLocaleTimeString();
+      document.getElementById('imbalance-time').textContent = `as of ${dateObj.toLocaleTimeString()}`;
+    } else {
+      document.getElementById('imbalance-time').textContent = `as of ${timestamp}`;
     }
   } catch(e) {
-    timestamp = 'recent';
+    document.getElementById('imbalance-time').textContent = 'as of recent';
   }
-  document.getElementById('imbalance-time').textContent = `as of ${timestamp}`;
   
   // Update chart
   if (records.length > 1) {
@@ -593,8 +591,8 @@ function setFallbackLiveData() {
   // Generate realistic mock data for demo when API is unavailable
   const mockImbalance = (Math.random() * 200 - 100).toFixed(1);
   document.getElementById('imbalance-value').textContent = mockImbalance;
-  document.getElementById('ace-value').textContent = (mockImbalance * 0.9).toFixed(1);
-  document.getElementById('imbalance-time').textContent = 'Demo mode - API pending';
+  document.getElementById('ace-value').textContent = (parseFloat(mockImbalance) * 0.85).toFixed(1);
+  document.getElementById('imbalance-time').textContent = 'Demo mode - connecting to API';
   
   const imbalanceElem = document.getElementById('imbalance-value');
   if (parseFloat(mockImbalance) > 0) {
@@ -622,7 +620,8 @@ function updateChart(records) {
     } else {
       timestamps.push(`#${i+1}`);
     }
-    values.push(r.imbalance || r.net_imbalance || r.value || 0);
+    const imbalanceVal = r.si || r.systemimbalance || r.imbalance || r.value || 0;
+    values.push(typeof imbalanceVal === 'number' ? imbalanceVal : parseFloat(imbalanceVal));
   }
   
   if (imbalanceChart) {
@@ -667,7 +666,7 @@ function updateChart(records) {
 }
 
 // ================================================================
-//  CAPACITY RENDER FUNCTIONS
+//  CAPACITY RENDER FUNCTIONS (Preserved from original)
 // ================================================================
 function renderMap() {
   leafletMarkers.forEach(m => m.remove());
