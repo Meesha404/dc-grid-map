@@ -33,7 +33,6 @@
       overflow: hidden;
     }
 
-    /* Tab Styling */
     .tabs {
       display: flex;
       border-bottom: 1px solid #30363d;
@@ -128,7 +127,6 @@
 
     .panel-body { padding: 16px 18px; }
 
-    /* Live Tab Styles */
     .live-metric {
       background: #21262d;
       border: 1px solid #30363d;
@@ -203,7 +201,6 @@
       border-color: #58a6ff;
     }
 
-    /* Original Tab Styles */
     .ctrl { margin-bottom: 20px; }
     .ctrl-label {
       font-size: 0.68rem;
@@ -346,13 +343,12 @@
   <div id="map"></div>
 
   <div class="panel">
-    <!-- Tabs -->
     <div class="tabs">
       <button class="tab active" onclick="switchTab('capacity')">📊 Grid Capacity</button>
       <button class="tab" onclick="switchTab('live')">⚡ Live Elia Data</button>
     </div>
 
-    <!-- Tab 1: Original Capacity Finder -->
+    <!-- Tab 1: Capacity -->
     <div id="capacity-tab" class="tab-content active">
       <div class="panel-header">
         <h1>🇧🇪 Belgium Grid Capacity</h1>
@@ -395,14 +391,14 @@
         <div class="sub-list" id="sub-list"></div>
         <div class="legend">
           <div class="leg"><div class="leg-dot" style="background:#3fb950;"></div> Can connect</div>
-          <div class="leg"><div class="leg-dot" style="background:#d29922;"></div> Marginal (within 20%)</div>
-          <div class="leg"><div class="leg-dot" style="background:#f85149;"></div> Insufficient capacity</div>
-          <div class="leg"><div class="leg-dot" style="background:#58a6ff; outline:2px dashed #58a6ff;"></div> Unlocked by flexibility</div>
+          <div class="leg"><div class="leg-dot" style="background:#d29922;"></div> Marginal</div>
+          <div class="leg"><div class="leg-dot" style="background:#f85149;"></div> Insufficient</div>
+          <div class="leg"><div class="leg-dot" style="background:#58a6ff; outline:2px dashed #58a6ff;"></div> Unlocked by flex</div>
         </div>
       </div>
     </div>
 
-    <!-- Tab 2: Live Elia Data -->
+    <!-- Tab 2: Live Data -->
     <div id="live-tab" class="tab-content">
       <div class="panel-header">
         <h1>⚡ Live Elia Grid Status</h1>
@@ -421,7 +417,7 @@
         </div>
         
         <div class="live-metric" id="ace-metric">
-          <div class="live-metric-label">Area Control Error (ACE)</div>
+          <div class="live-metric-label">Grid Stress Indicator</div>
           <div class="live-metric-value" id="ace-value">--</div>
           <div class="live-metric-unit">MW</div>
         </div>
@@ -431,10 +427,10 @@
         </div>
 
         <div class="info-box">
-          <strong>💡 What this means for your data center:</strong><br>
-          • <strong>Positive imbalance</strong> (green) = Excess generation → Better for new connections<br>
-          • <strong>Negative imbalance</strong> (red) = Generation deficit → Grid under stress<br>
-          • Data refreshes automatically every 60 seconds from Elia's API
+          <strong>💡 What this means:</strong><br>
+          • <strong>Positive</strong> = Excess generation → Good for new connections<br>
+          • <strong>Negative</strong> = Generation deficit → Grid under stress<br>
+          • Data refreshes every 60 seconds
         </div>
 
         <button class="refresh-btn" onclick="fetchLiveData()">🔄 Refresh Now</button>
@@ -446,7 +442,7 @@
 
 <script>
 // ================================================================
-//  SUBSTATION DATA (Static - keeps original functionality)
+//  SUBSTATION DATA
 // ================================================================
 const SUBSTATIONS_DATA = [
   { name:"Bruegel (Brussels)", lat:50.854, lng:4.352, voltage:150, availableMw:280 },
@@ -489,8 +485,18 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
 // ================================================================
 function switchTab(tabName) {
   // Update tab buttons
-  document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-  event.target.classList.add('active');
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(tab => tab.classList.remove('active'));
+  if (event && event.target) {
+    event.target.classList.add('active');
+  } else {
+    // If called programmatically, find the button with matching onclick
+    tabs.forEach(tab => {
+      if (tab.getAttribute('onclick') === `switchTab('${tabName}')`) {
+        tab.classList.add('active');
+      }
+    });
+  }
   
   // Update content
   document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
@@ -500,10 +506,9 @@ function switchTab(tabName) {
   if (tabName === 'live') {
     fetchLiveData();
     if (!updateInterval) {
-      updateInterval = setInterval(fetchLiveData, 60000); // Update every minute
+      updateInterval = setInterval(fetchLiveData, 60000);
     }
   } else if (tabName === 'capacity') {
-    // Ensure map is properly sized when switching back
     setTimeout(() => map.invalidateSize(), 100);
   }
 }
@@ -531,7 +536,7 @@ async function fetchLiveData() {
     }
   } catch (error) {
     console.error('Elia API error:', error);
-    document.getElementById('live-status').textContent = '⚠️ Waiting for data';
+    document.getElementById('live-status').textContent = '⚠️ Fallback mode';
     document.getElementById('live-badge').className = 'source-badge fallback';
     setFallbackLiveData();
   }
@@ -542,39 +547,63 @@ async function fetchLiveData() {
 function updateLiveDisplay(records) {
   const latest = records[0];
   
-  // Get imbalance value
+  // Try different field names that might be in the response
   let imbalance = latest.imbalance || latest.net_imbalance || latest.value || 0;
-  const ace = latest.ace || latest.area_control_error || (imbalance * 0.9);
+  let ace = latest.ace || latest.area_control_error || (imbalance * 0.9);
   
   // Update imbalance display
   const imbalanceElem = document.getElementById('imbalance-value');
   const imbalanceMetric = document.getElementById('imbalance-metric');
-  imbalanceElem.textContent = imbalance.toFixed(1);
+  imbalanceElem.textContent = typeof imbalance === 'number' ? imbalance.toFixed(1) : imbalance;
   
   if (imbalance > 0) {
     imbalanceElem.style.color = '#3fb950';
     imbalanceMetric.className = 'live-metric positive';
-  } else {
+  } else if (imbalance < 0) {
     imbalanceElem.style.color = '#f85149';
     imbalanceMetric.className = 'live-metric negative';
+  } else {
+    imbalanceElem.style.color = '#58a6ff';
+    imbalanceMetric.className = 'live-metric';
   }
   
-  // Update ACE display
+  // Update ACE/Stress display
   const aceElem = document.getElementById('ace-value');
-  aceElem.textContent = ace.toFixed(1);
+  aceElem.textContent = typeof ace === 'number' ? ace.toFixed(1) : ace;
   
   // Update timestamp
-  const timestamp = latest.datetime || latest.timestamp || new Date().toISOString();
-  document.getElementById('imbalance-time').textContent = `as of ${new Date(timestamp).toLocaleTimeString()}`;
+  let timestamp = latest.datetime || latest.timestamp || new Date().toISOString();
+  try {
+    const dateObj = new Date(timestamp);
+    if (!isNaN(dateObj.getTime())) {
+      timestamp = dateObj.toLocaleTimeString();
+    }
+  } catch(e) {
+    timestamp = 'recent';
+  }
+  document.getElementById('imbalance-time').textContent = `as of ${timestamp}`;
   
   // Update chart
-  updateChart(records.slice().reverse());
+  if (records.length > 1) {
+    updateChart(records.slice().reverse());
+  }
 }
 
 function setFallbackLiveData() {
-  document.getElementById('imbalance-value').textContent = '±0.0';
-  document.getElementById('ace-value').textContent = '±0.0';
-  document.getElementById('imbalance-time').textContent = 'Waiting for API response...';
+  // Generate realistic mock data for demo when API is unavailable
+  const mockImbalance = (Math.random() * 200 - 100).toFixed(1);
+  document.getElementById('imbalance-value').textContent = mockImbalance;
+  document.getElementById('ace-value').textContent = (mockImbalance * 0.9).toFixed(1);
+  document.getElementById('imbalance-time').textContent = 'Demo mode - API pending';
+  
+  const imbalanceElem = document.getElementById('imbalance-value');
+  if (parseFloat(mockImbalance) > 0) {
+    imbalanceElem.style.color = '#3fb950';
+    document.getElementById('imbalance-metric').className = 'live-metric positive';
+  } else if (parseFloat(mockImbalance) < 0) {
+    imbalanceElem.style.color = '#f85149';
+    document.getElementById('imbalance-metric').className = 'live-metric negative';
+  }
 }
 
 // ================================================================
@@ -582,11 +611,19 @@ function setFallbackLiveData() {
 // ================================================================
 function updateChart(records) {
   const ctx = document.getElementById('imbalance-chart').getContext('2d');
-  const timestamps = records.map(r => {
-    const d = new Date(r.datetime || r.timestamp);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  });
-  const values = records.map(r => (r.imbalance || r.net_imbalance || r.value || 0));
+  const timestamps = [];
+  const values = [];
+  
+  for (let i = 0; i < records.length; i++) {
+    const r = records[i];
+    let d = new Date(r.datetime || r.timestamp);
+    if (!isNaN(d.getTime())) {
+      timestamps.push(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    } else {
+      timestamps.push(`#${i+1}`);
+    }
+    values.push(r.imbalance || r.net_imbalance || r.value || 0);
+  }
   
   if (imbalanceChart) {
     imbalanceChart.data.labels = timestamps;
@@ -614,8 +651,15 @@ function updateChart(records) {
           legend: { labels: { color: '#8b949e', font: { size: 11 } } }
         },
         scales: {
-          y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' } },
-          x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', rotation: 45, maxRotation: 45 }
+          y: { 
+            grid: { color: '#30363d' }, 
+            ticks: { color: '#8b949e' },
+            title: { display: true, text: 'MW', color: '#8b949e' }
+          },
+          x: { 
+            grid: { color: '#30363d' }, 
+            ticks: { color: '#8b949e', rotation: 45, maxRotation: 45 }
+          }
         }
       }
     });
@@ -623,7 +667,7 @@ function updateChart(records) {
 }
 
 // ================================================================
-//  ORIGINAL CAPACITY RENDER FUNCTIONS (Preserved)
+//  CAPACITY RENDER FUNCTIONS
 // ================================================================
 function renderMap() {
   leafletMarkers.forEach(m => m.remove());
@@ -659,9 +703,16 @@ function renderMap() {
   }).join('');
 
   classified.forEach(s => {
-    const { fill, stroke, opacity, dashed } = getStyle(s.status);
+    const style = getStyle(s.status);
     const radius = Math.max(8, Math.min(30, Math.sqrt(s.effectiveMw) * 1.2));
-    const marker = L.circleMarker([s.lat, s.lng], { radius, fillColor: fill, color: stroke, weight: dashed ? 2 : 1.5, dashArray: dashed ? '5,4' : null, fillOpacity: opacity }).addTo(map);
+    const marker = L.circleMarker([s.lat, s.lng], {
+      radius: radius,
+      fillColor: style.fill,
+      color: style.stroke,
+      weight: style.dashed ? 2 : 1.5,
+      dashArray: style.dashed ? '5,4' : null,
+      fillOpacity: style.opacity
+    }).addTo(map);
     marker.bindPopup(`<b>${s.name}</b><br>${s.voltage} kV<br>Available: ${Math.round(s.effectiveMw)} MW<br>Your demand: ${targetMw} MW`);
     leafletMarkers.push(marker);
   });
@@ -697,7 +748,9 @@ function getStyle(status) {
   }
 }
 
-window.zoomTo = (lat, lng) => map.flyTo([lat, lng], 12, { duration: 1.2 });
+function zoomTo(lat, lng) {
+  map.flyTo([lat, lng], 12, { duration: 1.2 });
+}
 
 // ================================================================
 //  INITIALIZATION
@@ -707,9 +760,18 @@ document.getElementById('flex-slider').addEventListener('input', renderMap);
 document.getElementById('voltage-filter').addEventListener('change', renderMap);
 
 function hideLoading() {
-  setTimeout(() => document.getElementById('loading').style.display = 'none', 500);
+  setTimeout(() => {
+    const loadingDiv = document.getElementById('loading');
+    if (loadingDiv) loadingDiv.style.display = 'none';
+  }, 500);
 }
 
+// Make functions global for onclick handlers
+window.switchTab = switchTab;
+window.fetchLiveData = fetchLiveData;
+window.zoomTo = zoomTo;
+
+// Start the app
 renderMap();
 hideLoading();
 fetchLiveData();
