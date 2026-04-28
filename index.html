@@ -2,234 +2,113 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Belgium Grid Capacity — DC Site Finder</title>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #0d1117;
-      color: #e6edf3;
-    }
-
-    .app { display: flex; height: 100vh; }
-    #map { flex: 3; height: 100vh; }
+    body { margin:0; font-family:sans-serif; background:#0d1117; color:#e6edf3;}
+    .app { display:flex; height:100vh;}
+    #map { flex:3; }
 
     .panel {
-      flex: 1;
-      min-width: 270px;
-      max-width: 320px;
-      background: #161b22;
-      border-left: 1px solid #30363d;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
+      flex:1;
+      background:#161b22;
+      padding:16px;
+      display:flex;
+      flex-direction:column;
     }
 
-    .panel-header {
-      padding: 18px 18px 12px;
-      border-bottom: 1px solid #30363d;
-    }
+    .mw-display { font-size:2rem; text-align:center; }
+    .ctrl { margin-bottom:20px; }
 
-    .panel-header h1 {
-      font-size: 1rem;
-      font-weight: 600;
-      color: #f0f6fc;
-      margin-bottom: 4px;
-    }
+    input[type=range] { width:100%; }
 
-    .panel-header p {
-      font-size: 0.7rem;
-      color: #8b949e;
-      line-height: 1.5;
-    }
+    .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .stat { background:#21262d; padding:10px; text-align:center; }
 
-    .source-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      margin-top: 8px;
-      padding: 3px 8px;
-      border-radius: 20px;
-      font-size: 0.65rem;
-      font-weight: 500;
-      background: #3a2a1f;
-      color: #d29922;
-      border: 1px solid #9e6a03;
-    }
-
-    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-
-    .panel-body { flex: 1; overflow-y: auto; padding: 16px 18px; }
-
-    .ctrl { margin-bottom: 20px; }
-    .ctrl-label {
-      font-size: 0.68rem;
-      text-transform: uppercase;
-      color: #8b949e;
-      margin-bottom: 8px;
-      display: block;
-    }
-
-    .mw-display {
-      text-align: center;
-      font-size: 2.4rem;
-      font-weight: 700;
-      color: #58a6ff;
-      margin-bottom: 4px;
-    }
-
-    .mw-sub {
-      text-align: center;
-      font-size: 0.68rem;
-      color: #8b949e;
-      margin-bottom: 10px;
-    }
-
-    input[type=range] { width: 100%; cursor: pointer; }
-
-    select {
-      width: 100%;
-      padding: 8px;
-      background: #21262d;
-      border: 1px solid #30363d;
-      color: #e6edf3;
-      border-radius: 6px;
-    }
-
-    .stats {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-bottom: 20px;
-    }
-
-    .stat {
-      background: #21262d;
-      border: 1px solid #30363d;
-      border-radius: 8px;
-      padding: 10px;
-      text-align: center;
-    }
-
-    .stat .val { font-size: 1.4rem; font-weight: bold; }
-    .stat.green .val { color: #3fb950; }
-    .stat.red .val { color: #f85149; }
-    .stat.blue .val { color: #58a6ff; }
+    .green { color:#3fb950; }
+    .red { color:#f85149; }
 
     .insight {
-      background: #1c2128;
-      border-left: 3px solid #58a6ff;
-      padding: 10px;
-      font-size: 0.75rem;
-      color: #8b949e;
-      margin-bottom: 20px;
-    }
-
-    .legend {
-      margin-top: 20px;
-      padding-top: 16px;
-      border-top: 1px solid #30363d;
-      font-size: 0.7rem;
-      color: #8b949e;
+      margin-top:20px;
+      padding:10px;
+      background:#1c2128;
+      font-size:0.8rem;
     }
 
     #loading {
-      position: fixed;
-      inset: 0;
-      background: rgba(13,17,23,0.85);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      flex-direction: column;
+      position:fixed;
+      inset:0;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      background:#000;
+      z-index:999;
     }
-
-    .spinner {
-      width: 36px;
-      height: 36px;
-      border: 3px solid #30363d;
-      border-top-color: #58a6ff;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 
 <body>
 
-<div id="loading">
-  <div class="spinner"></div>
-  <p id="loading-msg">Loading grid model…</p>
-</div>
+<div id="loading">Loading grid model…</div>
 
 <div class="app">
   <div id="map"></div>
 
   <div class="panel">
-    <div class="panel-header">
-      <h1>🇧🇪 Belgium Grid Capacity</h1>
-      <p>Where can a data center connect to the grid?</p>
+    <h2>🇧🇪 Grid Capacity Model</h2>
+    <small>Model based on public grid data (Elia)</small><br/>
+    <small style="color:#8b949e;">
+      Capacity is estimated — real availability depends on grid studies
+    </small>
 
-      <div class="source-badge">
-        <span class="dot"></span>
-        <span id="source-text">Model based on public grid data (Elia)</span>
-      </div>
-
-      <small style="color:#8b949e;">
-        Capacity is estimated — real availability depends on grid studies
-      </small>
+    <div class="ctrl">
+      <div class="mw-display" id="mw-display">100 MW</div>
+      <input type="range" id="mw-slider" min="10" max="500" step="10" value="100"/>
     </div>
 
-    <div class="panel-body">
-
-      <div class="ctrl">
-        <span class="ctrl-label">Target MW</span>
-        <div class="mw-display" id="mw-display">10 MW</div>
-        <input type="range" id="mw-slider" min="10" max="500" step="10" value="10" />
-      </div>
-
-      <div class="ctrl">
-        <span class="ctrl-label">Flexibility</span>
-        <div class="mw-display" id="flex-display" style="color:#3fb950;">0%</div>
-        <input type="range" id="flex-slider" min="0" max="20" step="5" value="0" />
-      </div>
-
-      <div class="stats">
-        <div class="stat green"><div class="val" id="s-ok">0</div><div>Can connect</div></div>
-        <div class="stat red"><div class="val" id="s-blocked">0</div><div>Blocked</div></div>
-        <div class="stat blue"><div class="val" id="s-unlocked">0</div><div>Unlocked</div></div>
-        <div class="stat"><div class="val" id="s-total">0</div><div>Total</div></div>
-      </div>
-
-      <div class="insight" id="insight-box"></div>
-
-      <div class="legend">
-        Model inspired by Elia grid data
-      </div>
-
+    <div class="ctrl">
+      <div class="mw-display" id="flex-display">0%</div>
+      <input type="range" id="flex-slider" min="0" max="20" step="5" value="0"/>
     </div>
+
+    <div class="stats">
+      <div class="stat"><div id="s-ok" class="green">0</div>OK</div>
+      <div class="stat"><div id="s-blocked" class="red">0</div>Blocked</div>
+      <div class="stat"><div id="s-total">0</div>Total</div>
+    </div>
+
+    <div class="insight" id="insight-box"></div>
   </div>
 </div>
 
 <script>
+// DOM refs
+const mw = document.getElementById('mw-slider');
+const flexSlider = document.getElementById('flex-slider');
+
+const sOk = document.getElementById('s-ok');
+const sBlocked = document.getElementById('s-blocked');
+const sTotal = document.getElementById('s-total');
+
+const insightBox = document.getElementById('insight-box');
+
+// Map
 const map = L.map('map').setView([50.65, 4.5], 8);
 
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
+// Data
 let substations = [
   { name:"Brussels", lat:50.85, lng:4.35, voltage:150 },
   { name:"Antwerp", lat:51.22, lng:4.40, voltage:380 },
   { name:"Ghent", lat:51.05, lng:3.72, voltage:380 }
 ];
 
+// Deterministic MW
 function estimateMw(voltage, name) {
   const base = voltage === 380 ? 350 : 150;
   let hash = 0;
@@ -244,23 +123,31 @@ substations = substations.map(s => ({
   availableMw: estimateMw(s.voltage, s.name)
 }));
 
+// Render
 function render() {
-  map.eachLayer(l => { if (l instanceof L.CircleMarker) map.removeLayer(l); });
+  map.eachLayer(l => {
+    if (l instanceof L.CircleMarker) map.removeLayer(l);
+  });
 
   const target = +mw.value;
   const flex = +flexSlider.value;
   const effective = target * (1 - flex/100);
 
-  let ok=0, blocked=0, unlocked=0;
+  document.getElementById('mw-display').textContent = target + ' MW';
+  document.getElementById('flex-display').textContent = flex + '%';
+
+  let ok = 0, blocked = 0;
 
   substations.forEach(s => {
     const status = s.availableMw >= effective ? 'ok' : 'blocked';
     if(status==='ok') ok++; else blocked++;
 
-    L.circleMarker([s.lat,s.lng], {
+    L.circleMarker([s.lat, s.lng], {
       radius: Math.sqrt(s.availableMw),
       fillColor: status==='ok' ? '#3fb950' : '#f85149',
-      fillOpacity: 0.7
+      fillOpacity: 0.7,
+      color:'#000',
+      weight:1
     }).addTo(map);
   });
 
@@ -273,9 +160,12 @@ function render() {
     : `${flex}% flexibility reduces demand to ${Math.round(effective)} MW`;
 }
 
-mw.oninput = flexSlider.oninput = render;
-render();
+// Events
+mw.addEventListener('input', render);
+flexSlider.addEventListener('input', render);
 
+// Init
+render();
 document.getElementById('loading').style.display='none';
 </script>
 
