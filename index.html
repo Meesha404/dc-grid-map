@@ -289,7 +289,7 @@
 
       <!-- TARGET MW -->
       <div class="ctrl">
-        <span class="ctrl-label">Your target capacity</span>
+        <span class="ctrl-label">🎯 Your target capacity</span>
         <div class="mw-display" id="mw-display">10 MW</div>
         <div class="mw-sub">drag to set data center size</div>
         <input type="range" id="mw-slider" min="10" max="500" step="10" value="10" />
@@ -297,15 +297,15 @@
 
       <!-- FLEXIBILITY -->
       <div class="ctrl">
-        <span class="ctrl-label">Demand flexibility</span>
+        <span class="ctrl-label">⚡ Demand flexibility</span>
         <div class="mw-display" id="flex-display" style="color:#3fb950;">0%</div>
-        <div class="mw-sub">shift load to unlock more grid connection points</div>
+        <div class="mw-sub">like the Elia LinkedIn post — flexibility unlocks spots</div>
         <input type="range" id="flex-slider" min="0" max="20" step="5" value="0" />
       </div>
 
       <!-- VOLTAGE FILTER -->
       <div class="ctrl">
-        <span class="ctrl-label">Voltage level</span>
+        <span class="ctrl-label">🔌 Voltage level</span>
         <select id="voltage-filter">
           <option value="all">All voltage levels</option>
           <option value="380">380 kV (hyperscale)</option>
@@ -336,7 +336,7 @@
 
       <!-- INSIGHT CALLOUT -->
       <div class="insight" id="insight-box">
-        Set your target MW and drag the flexibility slider to see how demand flexibility unlocks grid capacity.
+        Set your target MW and drag the flexibility slider to see how demand flexibility unlocks grid capacity — replicating Elia's own analysis.
       </div>
 
       <!-- SUBSTATION LIST -->
@@ -358,13 +358,20 @@
 
 <script>
 // ================================================================
-//  CONFIG
+//  CONFIG — three URLs tried in order until one works
 // ================================================================
-const ELIA_BASE = 'https://opendata.elia.be/api/explore/v2.1';
 
-// Substation dataset (ods175 = Belgian HV substations with geo)
-const SUBSTATIONS_URL =
-  `${ELIA_BASE}/catalog/datasets/ods175/records?limit=100&select=name,voltage,geo_point_2d`;
+// Option 1: Export endpoint (no rate limit, most reliable)
+const URL_EXPORT =
+  'https://opendata.elia.be/api/explore/v2.1/catalog/datasets/ods175/exports/json?limit=200';
+
+// Option 2: Records endpoint (standard API)
+const URL_RECORDS =
+  'https://opendata.elia.be/api/explore/v2.1/catalog/datasets/ods175/records?limit=100&select=name,voltage,geo_point_2d';
+
+// Option 3: Legacy v1 API (older but sometimes works when v2 is down)
+const URL_LEGACY =
+  'https://opendata.elia.be/api/records/1.0/search/?dataset=ods175&rows=100';
 
 // ================================================================
 //  FALLBACK DATA
@@ -421,42 +428,90 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
 // ================================================================
 //  FETCH LIVE DATA FROM ELIA API
 // ================================================================
-async function fetchEliaSubstations() {
-  setLoadingMsg('Fetching Elia substation data…');
+//  FETCH — tries 3 Elia endpoints in order, falls back to curated data
+// ================================================================
+
+// Parse records endpoint response (v2.1)
+function parseRecords(json) {
+  const rows = json.results || json.records || [];
+  return rows
+    .filter(r => r.geo_point_2d || (r.fields && r.fields.geo_point_2d))
+    .map(r => {
+      const f   = r.fields || r;
+      const geo = f.geo_point_2d;
+      return {
+        name:        f.name || f.substation_name || f.nom || 'Unknown',
+        lat:         geo.lat,
+        lng:         geo.lon,
+        voltage:     parseInt(f.voltage || f.tension || 150),
+        availableMw: estimateMw(parseInt(f.voltage || f.tension || 150)),
+      };
+    })
+    .filter(r => r.lat && r.lng);
+}
+
+// Parse export endpoint response (array of objects)
+function parseExport(json) {
+  const rows = Array.isArray(json) ? json : (json.results || []);
+  return rows
+    .filter(r => r.geo_point_2d)
+    .map(r => ({
+      name:        r.name || r.substation_name || r.nom || 'Unknown',
+      lat:         r.geo_point_2d.lat,
+      lng:         r.geo_point_2d.lon,
+      voltage:     parseInt(r.voltage || r.tension || 150),
+      availableMw: estimateMw(parseInt(r.voltage || r.tension || 150)),
+    }))
+    .filter(r => r.lat && r.lng);
+}
+
+async function tryFetch(url, label, parseFn) {
+  setLoadingMsg(`Trying ${label}…`);
   try {
-    const res = await fetch(SUBSTATIONS_URL, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(9000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-
-    if (!json.results || json.results.length === 0) throw new Error('Empty response');
-
-    // Map Elia fields → our format
-    // Real dataset may vary; we parse what we can and assign estimated MW
-    substations = json.results
-      .filter(r => r.geo_point_2d)
-      .map(r => ({
-        name: r.name || r.substation_name || 'Unknown',
-        lat:  r.geo_point_2d.lat,
-        lng:  r.geo_point_2d.lon,
-        voltage: parseInt(r.voltage) || 150,
-        // Elia substation referential doesn't include available MW directly.
-        // We estimate from voltage: 380kV=300–600MW, 150kV=50–250MW, 70kV=20–120MW
-        availableMw: estimateMw(parseInt(r.voltage) || 150),
-      }));
-
-    usingLiveData = true;
-    setSourceBadge(true, `Live — Elia API (${substations.length} substations)`);
-    return true;
+    const parsed = parseFn(json);
+    if (parsed.length === 0) throw new Error('No usable records');
+    return parsed;
   } catch (e) {
-    console.warn('Elia API failed, using fallback:', e.message);
-    return false;
+    console.warn(`${label} failed:`, e.message);
+    return null;
   }
 }
 
+async function fetchEliaSubstations() {
+  // Try export endpoint first (no rate limit)
+  let data = await tryFetch(URL_EXPORT, 'Elia export API', parseExport);
+  if (data) {
+    substations = data;
+    setSourceBadge(true, `Live — Elia export API (${substations.length} substations)`);
+    return true;
+  }
+
+  // Try records endpoint
+  data = await tryFetch(URL_RECORDS, 'Elia records API', parseRecords);
+  if (data) {
+    substations = data;
+    setSourceBadge(true, `Live — Elia records API (${substations.length} substations)`);
+    return true;
+  }
+
+  // Try legacy v1 API
+  data = await tryFetch(URL_LEGACY, 'Elia legacy API', parseRecords);
+  if (data) {
+    substations = data;
+    setSourceBadge(true, `Live — Elia legacy API (${substations.length} substations)`);
+    return true;
+  }
+
+  // All failed
+  return false;
+}
+
 function estimateMw(voltage) {
-  // Random seed per voltage tier so substations look varied, not identical
-  const base = voltage === 380 ? 350 : voltage === 150 ? 150 : 60;
-  const variance = voltage === 380 ? 250 : voltage === 150 ? 120 : 60;
+  const base     = voltage >= 380 ? 350 : voltage >= 150 ? 150 : 60;
+  const variance = voltage >= 380 ? 250 : voltage >= 150 ? 120 : 60;
   return base + Math.floor(Math.random() * variance);
 }
 
