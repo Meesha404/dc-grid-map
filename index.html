@@ -8,7 +8,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
   <style>
-    /* Your existing styles here - keeping it clean */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #e6edf3; }
     .app { display: flex; height: 100vh; }
@@ -62,6 +61,17 @@
     #loading { position: fixed; inset: 0; background: rgba(13,17,23,0.95); display: flex; align-items: center; justify-content: center; z-index: 9999; flex-direction: column; gap: 14px; }
     .spinner { width: 36px; height: 36px; border: 3px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .debug-box {
+      background: #1c2128;
+      border: 1px solid #58a6ff;
+      border-radius: 8px;
+      padding: 12px;
+      margin: 10px;
+      font-size: 0.7rem;
+      font-family: monospace;
+      color: #58a6ff;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -69,6 +79,7 @@
 <div id="loading">
   <div class="spinner"></div>
   <p>Loading REAL Elia hosting capacity data...</p>
+  <div id="debug-info" style="font-size: 0.7rem; color: #8b949e; margin-top: 10px;"></div>
 </div>
 
 <div class="app">
@@ -124,7 +135,7 @@
         <div class="leg"><div class="leg-dot" style="background:#58a6ff; outline:2px dashed #58a6ff;"></div> Unlocked by flexibility</div>
       </div>
       <div class="footer-note">
-        Source: Elia Group - Hosting Capacity Map (export February 2026)<br>
+        Source: Elia Group - Hosting Capacity Map (export)<br>
         Data includes Load hosting capacity at 0%, 5%, 10%, 20% flexibility
       </div>
     </div>
@@ -136,35 +147,101 @@ let substations = [];
 let markers = [];
 let map;
 
-// Load Excel file and convert to JSON
 async function loadEliaData() {
+  const debugDiv = document.getElementById('debug-info');
+  
   try {
-    // IMPORTANT: Upload your Excel file to the same folder as index.html
-    // Then use the correct filename below
+    debugDiv.innerHTML = 'Step 1: Fetching Excel file...';
+    console.log('1. Starting to load Excel file...');
+    
     const response = await fetch('Hosting capacity.xlsx');
+    console.log('2. Fetch response:', response.status, response.statusText);
+    debugDiv.innerHTML = `Step 2: HTTP ${response.status} ${response.statusText}`;
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: File not found. Make sure "Hosting capacity.xlsx" is in the same folder.`);
+    }
+    
     const arrayBuffer = await response.arrayBuffer();
+    console.log('3. File loaded, size:', arrayBuffer.byteLength, 'bytes');
+    debugDiv.innerHTML = `Step 3: Loaded ${arrayBuffer.byteLength} bytes`;
+    
     const workbook = XLSX.read(arrayBuffer);
+    console.log('4. Workbook loaded, sheets:', workbook.SheetNames);
+    debugDiv.innerHTML = `Step 4: Sheets found: ${workbook.SheetNames.join(', ')}`;
+    
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet);
+    console.log('5. Rows parsed:', rows.length);
+    debugDiv.innerHTML = `Step 5: Parsed ${rows.length} rows`;
     
-    // Transform to our substation format
-    substations = rows.map(row => {
-      // Get capacity based on flexibility level
+    if (rows.length === 0) {
+      throw new Error('Excel file has no data rows');
+    }
+    
+    // 🔍 DEBUG: Show actual column names
+    const columnNames = Object.keys(rows[0]);
+    console.log('📊 ACTUAL COLUMN NAMES IN YOUR EXCEL:');
+    console.log(columnNames);
+    console.log('📝 FIRST ROW SAMPLE:');
+    console.log(rows[0]);
+    
+    debugDiv.innerHTML = `Step 6: Columns found: ${columnNames.slice(0, 5).join(', ')}...<br>
+                          🔍 Open Console (F12) to see full column names and first row data.`;
+    
+    // Try to intelligently map columns based on common patterns
+    const findColumn = (possibleNames) => {
+      for (const name of possibleNames) {
+        const found = columnNames.find(col => col.toLowerCase().includes(name.toLowerCase()));
+        if (found) return found;
+      }
+      return null;
+    };
+    
+    const nameCol = findColumn(['substation', 'site', 'name']);
+    const voltageCol = findColumn(['voltage', 'kV']);
+    const latCol = findColumn(['latitude', 'northing', 'lat', 'y']);
+    const lngCol = findColumn(['longitude', 'easting', 'lng', 'lon', 'x']);
+    
+    console.log('Mapped columns:', { nameCol, voltageCol, latCol, lngCol });
+    
+    substations = rows.map((row, idx) => {
       const getCapacity = (flexPct) => {
-        switch(flexPct) {
-          case 0: return row['Load_0%_flex'] || 0;
-          case 5: return row['Load_5%_flex'] || 0;
-          case 10: return row['Load_10%_flex'] || 0;
-          case 20: return row['Load_20%_flex'] || 0;
-          default: return row['Load_0%_flex'] || 0;
+        // Try to find flexibility column
+        const flexPatterns = [
+          `Load_${flexPct}%_flex`,
+          `Load_${flexPct}_flex`,
+          `load_${flexPct}pct_flex`,
+          `Hosting_Capacity_${flexPct}pct`,
+          `Capacity_${flexPct}%`,
+          `HC_Load_${flexPct}pct`
+        ];
+        
+        for (const pattern of flexPatterns) {
+          if (row[pattern] !== undefined) return parseFloat(row[pattern]) || 0;
         }
+        
+        // Try case insensitive
+        for (const key of Object.keys(row)) {
+          if (key.toLowerCase().includes(`load_${flexPct}`) || 
+              key.toLowerCase().includes(`load ${flexPct}%`)) {
+            return parseFloat(row[key]) || 0;
+          }
+        }
+        return 0;
       };
       
+      // Extract values
+      let name = nameCol ? row[nameCol] : row['Substation'] || row['Site'] || `Substation_${idx}`;
+      let voltage = voltageCol ? parseInt(row[voltageCol]) : (row['Voltage (kV)'] || 150);
+      let lat = latCol ? parseFloat(row[latCol]) : parseFloat(row['Latitude Northing (deg)'] || row['Latitude'] || 0);
+      let lng = lngCol ? parseFloat(row[lngCol]) : parseFloat(row['Longitude Easting (deg)'] || row['Longitude'] || 0);
+      
       return {
-        name: row['Substation'] || row['Site'],
-        voltage: row['Voltage (kV)'],
-        lat: parseFloat(row['Latitude Northing (deg)']),
-        lng: parseFloat(row['Longitude Easting (deg)']),
+        name: String(name),
+        voltage: voltage,
+        lat: lat,
+        lng: lng,
         capacity: {
           0: getCapacity(0),
           5: getCapacity(5),
@@ -172,18 +249,45 @@ async function loadEliaData() {
           20: getCapacity(20)
         }
       };
-    }).filter(s => s.lat && s.lng && !isNaN(s.lat)); // Filter valid coordinates
+    }).filter(s => s.lat && !isNaN(s.lat) && s.lat !== 0 && s.lng && !isNaN(s.lng));
     
-    console.log(`Loaded ${substations.length} substations from Elia data`);
-    document.getElementById('loading').style.display = 'none';
+    console.log(`✅ Loaded ${substations.length} substations`);
+    console.log('First substation sample:', substations[0]);
+    debugDiv.innerHTML = `✅ Loaded ${substations.length} substations from Elia data. Check console for details.`;
+    
+    if (substations.length === 0) {
+      debugDiv.innerHTML = `❌ No valid substations found.<br>
+                           Expected columns: Substation name, Voltage, Latitude, Longitude, Load_X%_flex<br>
+                           Found columns: ${columnNames.join(', ')}<br>
+                           Please check console for details.`;
+      return;
+    }
+    
+    setTimeout(() => {
+      document.getElementById('loading').style.display = 'none';
+    }, 1000);
+    
     initMap();
+    
   } catch(error) {
-    console.error('Failed to load Excel:', error);
-    document.getElementById('loading').innerHTML = '<p>❌ Failed to load Elia data. Make sure "Hosting capacity.xlsx" is in the same folder.</p>';
+    console.error('ERROR:', error);
+    document.getElementById('loading').innerHTML = `
+      <div style="color:#f85149; background:#1c2128; padding:20px; border-radius:8px; margin:20px; text-align:left; max-width:500px;">
+        <strong>❌ Failed to load Elia data</strong><br><br>
+        Error: ${error.message}<br><br>
+        <strong>Possible fixes:</strong><br>
+        1. Make sure "Hosting capacity.xlsx" is in the same folder as index.html<br>
+        2. Check file name matches exactly (including spaces)<br>
+        3. Open Console (F12) for full error details<br><br>
+        <button onclick="location.reload()" style="background:#21262d; border:1px solid #58a6ff; color:white; padding:8px 16px; border-radius:6px; cursor:pointer; margin-top:10px;">Retry</button>
+      </div>
+    `;
   }
 }
 
 function initMap() {
+  if (!substations.length) return;
+  
   map = L.map('map').setView([50.65, 4.5], 8);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OSM & CARTO | Data: Elia Group - Hosting Capacity Map',
@@ -194,12 +298,9 @@ function initMap() {
 }
 
 function classify(sub, targetMw, flexPct) {
-  // Use the ACTUAL capacity from Elia data for this flexibility level
-  const availableMw = sub.capacity[flexPct] || sub.capacity[0];
+  const availableMw = sub.capacity[flexPct] || sub.capacity[0] || 0;
   const wasBlocked = availableMw < targetMw;
-  
-  // For funlock feature - check if lower flexibility would block but current unlocks
-  const lowerFlexCapacity = sub.capacity[0];
+  const lowerFlexCapacity = sub.capacity[0] || 0;
   const nowOk = availableMw >= targetMw;
   const isUnlocked = (lowerFlexCapacity < targetMw) && nowOk && flexPct > 0;
   const isWarn = nowOk && availableMw < targetMw * 1.2;
@@ -223,7 +324,7 @@ function getStyle(status) {
 }
 
 function render() {
-  if (!substations.length) return;
+  if (!substations.length || !map) return;
   
   markers.forEach(m => m.remove());
   markers = [];
@@ -251,16 +352,13 @@ function render() {
   document.getElementById('s-unlocked').textContent = unlocked;
   document.getElementById('s-total').textContent = classified.length;
   
-  // Generate insight based on REAL data
   const insightBox = document.getElementById('insight-box');
   if (flexPct === 0) {
     insightBox.innerHTML = `<strong>📊 At ${targetMw} MW with 0% flexibility:</strong><br> Only ${ok} of ${filtered.length} substations can connect.<br><br>⚡ Try adding 5-20% flexibility to see how Elia's data shows more spots unlock.`;
   } else {
-    const unlockedCount = classified.filter(s => s.status === 'unlocked').length;
     insightBox.innerHTML = `<strong>⚡ With ${flexPct}% demand flexibility:</strong><br> • ${ok + unlocked} total spots available<br> • ${unlocked} substation${unlocked !== 1 ? 's were' : ' was'} previously constrained at 0% flex<br><br>💡 This is Elia's real hosting capacity data. Flexibility works.`;
   }
   
-  // Render list
   const listContainer = document.getElementById('sub-list');
   const sorted = [...classified].sort((a,b) => {
     const order = { ok: 0, unlocked: 1, warn: 2, blocked: 3 };
@@ -281,10 +379,9 @@ function render() {
     `;
   }).join('');
   
-  // Render markers
   classified.forEach(s => {
     const style = getStyle(s.status);
-    const radius = Math.max(8, Math.min(28, Math.sqrt(s.availableMw) * 0.8));
+    const radius = Math.max(8, Math.min(28, Math.sqrt(s.availableMw) * 0.6));
     const marker = L.circleMarker([s.lat, s.lng], {
       radius: radius,
       fillColor: style.fill,
@@ -310,7 +407,7 @@ function render() {
 }
 
 function flyTo(lat, lng) {
-  map.flyTo([lat, lng], 12, { duration: 1 });
+  if (map) map.flyTo([lat, lng], 12, { duration: 1 });
 }
 
 // Event listeners
