@@ -344,7 +344,7 @@ function render() {
   
   const insightBox = document.getElementById('insight-box');
   if (flexPct === 0) {
-    insightBox.innerHTML = `<strong>📊 At ${targetMw} MW with 0% flexibility:</strong><br> Only ${ok} of ${filtered.length} substations can connect.<br><br>Try adding 5-20% flexibility to see more spots unlock.`;
+    insightBox.innerHTML = `<strong>At ${targetMw} MW with 0% flexibility:</strong><br> Only ${ok} of ${filtered.length} substations can connect.<br><br>Try adding 5-20% flexibility to see more spots unlock.`;
   } else {
     insightBox.innerHTML = `<strong>⚡ With ${flexPct}% demand flexibility:</strong><br> • ${ok + unlocked} total spots available<br> • ${unlocked} substation${unlocked !== 1 ? 's were' : ' was'} previously constrained<br><br>This is Elia's real hosting capacity data. Flexibility works.`;
   }
