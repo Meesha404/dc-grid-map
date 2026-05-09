@@ -77,7 +77,7 @@
     <div class="panel-header">
       <h1>🇧🇪 Belgium Grid Capacity</h1>
       <p>Based on Elia Hosting Capacity Map (Feb 2026 export)</p>
-      <div class="badge">📊 Source: Elia Hosting Capacity Map (Feb 2026)</div>
+      <div class="badge">Source: Elia Hosting Capacity Map (Feb 2026)</div>
     </div>
     <div class="panel-body">
       <div class="ctrl">
@@ -90,7 +90,7 @@
       <div class="ctrl">
         <span class="ctrl-label">Demand flexibility commitment</span>
         <div class="mw-display" id="flex-display" style="color:#3fb950;">0%</div>
-        <div class="mw-sub">← based on Elia's actual flexibility data</div>
+        <div class="mw-sub">based on Elia's actual flexibility data</div>
         <input type="range" id="flex-slider" min="0" max="20" step="5" value="0" />
       </div>
 
@@ -112,7 +112,7 @@
       </div>
 
       <div class="insight" id="insight-box">
-        <strong>📊 Loading real Elia data...</strong>
+        <strong>Loading real Elia data...</strong>
       </div>
 
       <div class="sub-list" id="sub-list"></div>
@@ -344,9 +344,9 @@ function render() {
   
   const insightBox = document.getElementById('insight-box');
   if (flexPct === 0) {
-    insightBox.innerHTML = `<strong>📊 At ${targetMw} MW with 0% flexibility:</strong><br> Only ${ok} of ${filtered.length} substations can connect.<br><br>⚡ Try adding 5-20% flexibility to see more spots unlock.`;
+    insightBox.innerHTML = `<strong>📊 At ${targetMw} MW with 0% flexibility:</strong><br> Only ${ok} of ${filtered.length} substations can connect.<br><br>Try adding 5-20% flexibility to see more spots unlock.`;
   } else {
-    insightBox.innerHTML = `<strong>⚡ With ${flexPct}% demand flexibility:</strong><br> • ${ok + unlocked} total spots available<br> • ${unlocked} substation${unlocked !== 1 ? 's were' : ' was'} previously constrained<br><br>💡 This is Elia's real hosting capacity data. Flexibility works.`;
+    insightBox.innerHTML = `<strong>⚡ With ${flexPct}% demand flexibility:</strong><br> • ${ok + unlocked} total spots available<br> • ${unlocked} substation${unlocked !== 1 ? 's were' : ' was'} previously constrained<br><br>This is Elia's real hosting capacity data. Flexibility works.`;
   }
   
   const listContainer = document.getElementById('sub-list');
@@ -388,7 +388,7 @@ function render() {
         <hr>
         <div><strong>Available @ ${flexPct}% flex:</strong> ${Math.round(s.availableMw)} MW</div>
         <div><strong>Your demand:</strong> ${targetMw} MW</div>
-        <div style="margin-top:6px;">${s.status === 'unlocked' ? '⚡ Unlocked by flexibility!' : s.status === 'ok' ? '✅ Sufficient capacity' : '❌ Insufficient capacity'}</div>
+        <div style="margin-top:6px;">${s.status === 'unlocked' ? ' Unlocked by flexibility!' : s.status === 'ok' ? '✅ Sufficient capacity' : '❌ Insufficient capacity'}</div>
       </div>
     `);
     
