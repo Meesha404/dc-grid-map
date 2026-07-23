@@ -358,7 +358,7 @@ function render() {
   if (flexPct === 0) {
     insightBox.innerHTML = `<strong>At ${targetMw} MW with 0% flexibility:</strong><br> Only ${ok} of ${filtered.length} substations can connect.<br><br>Try adding 5-20% flexibility to see more spots unlock.`;
   } else {
-    insightBox.innerHTML = `<strong>⚡ With ${flexPct}% demand flexibility:</strong><br> • ${ok + unlocked} total spots available<br> • ${unlocked} substation${unlocked !== 1 ? 's were' : ' was'} previously constrained<br><br>This is Elia's real hosting capacity data. Flexibility works.`;
+    insightBox.innerHTML = `<strong>With ${flexPct}% demand flexibility:</strong><br> • ${ok + unlocked} total spots available<br> • ${unlocked} substation${unlocked !== 1 ? 's were' : ' was'} previously constrained<br><br>This is Elia's real hosting capacity data. Flexibility works.`;
   }
   
   const listContainer = document.getElementById('sub-list');
@@ -419,5 +419,8 @@ window.flyTo = flyTo;
 
 loadEliaData();
 </script>
+<div style="position: fixed; bottom: 12px; right: 12px; background: rgba(22, 27, 34, 0.95); padding: 6px 14px; border-radius: 20px; font-size: 0.7rem; color: #8b949e; backdrop-filter: blur(4px); z-index: 1000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; border: 1px solid #30363d;">
+    Built by <a href="https://www.linkedin.com/in/manisha-sharma22/" target="_blank" style="color: #58a6ff; text-decoration: none; font-weight: 500;">Manisha Sharma, MBA</a> — Feedback welcome
+</div>
 </body>
 </html>
