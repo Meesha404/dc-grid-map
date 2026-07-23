@@ -91,16 +91,13 @@
         <span class="ctrl-label">Demand flexibility commitment</span>
         <div class="mw-display" id="flex-display" style="color:#3fb950;">0%</div>
         <div class="mw-sub">based on Elia's actual flexibility data</div>
-        <input type="range" id="flex-slider" min="0" max="20" step="5" value="0" />
+        <input type="range" id="flex-slider" min="0" max="3" step="1" value="0" />
       </div>
 
       <div class="ctrl">
         <span class="ctrl-label">Voltage level</span>
         <select id="voltage-filter">
           <option value="all">All voltage levels</option>
-          <option value="380">380 kV (hyperscale)</option>
-          <option value="150">150 kV (large)</option>
-          <option value="70">70 kV (medium)</option>
         </select>
       </div>
 
@@ -135,6 +132,19 @@
 let substations = [];
 let markers = [];
 let map;
+const FLEX_LEVELS = [0, 5, 10, 20]; // the only flexibility % values Elia actually publishes
+
+function populateVoltageFilter() {
+  const voltages = [...new Set(substations.map(s => s.voltage))].sort((a, b) => b - a);
+  const select = document.getElementById('voltage-filter');
+  voltages.forEach(v => {
+    const count = substations.filter(s => s.voltage === v).length;
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = `${v} kV (${count})`;
+    select.appendChild(opt);
+  });
+}
 
 async function loadEliaData() {
   const debugDiv = document.getElementById('debug-info');
@@ -259,6 +269,8 @@ async function loadEliaData() {
       return;
     }
     
+    populateVoltageFilter();
+    
     setTimeout(() => {
       document.getElementById('loading').style.display = 'none';
     }, 1000);
@@ -320,7 +332,7 @@ function render() {
   markers = [];
   
   const targetMw = parseInt(document.getElementById('mw-slider').value);
-  const flexPct = parseInt(document.getElementById('flex-slider').value);
+  const flexPct = FLEX_LEVELS[parseInt(document.getElementById('flex-slider').value)];
   const voltFilter = document.getElementById('voltage-filter').value;
   
   document.getElementById('mw-display').textContent = targetMw + ' MW';
